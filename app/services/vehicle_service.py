@@ -6,10 +6,10 @@ from app.config import YOLO_MODEL, DETECTION_CONFIDENCE
 
 class VehicleRecognitionService:
     def __init__(self):
-        print("🚀 Loading YOLO vehicle model...")
+        print("Loading YOLO vehicle model...")
         self.yolo = YOLO(YOLO_MODEL)
         
-        print("📖 Loading EasyOCR...")
+        print("Loading EasyOCR...")
         self.ocr = easyocr.Reader(['en'], gpu=False)
         
         self.vehicle_classes = {
@@ -19,7 +19,7 @@ class VehicleRecognitionService:
             7: 'Truck',
             1: 'Bicycle'
         }
-        print("✅ Models loaded!")
+        print("Models loaded!")
     
     def process_image(self, image_path):
         """Process image and return detected vehicles with plates"""
@@ -90,7 +90,115 @@ class VehicleRecognitionService:
         }
     
     def _read_plate(self, roi):
-        """Read license plate by looking at bottom half of vehicle"""
+        """Try contour-based plate cropping first, fallback to bottom-half"""
+        if roi is None or roi.size == 0:
+            return None
+
+        # --- PRIMARY: Contour-based plate crop ---
+        plate_roi = self._crop_plate_contour(roi)
+        if plate_roi is not None:
+            text = self._ocr_plate(plate_roi)
+            if text:
+                return text
+
+        # --- BACKUP: Bottom-half method ---
+        return self._read_plate_fallback(roi)
+    
+    def _crop_plate_contour(self, roi):
+        """Find and crop the license plate using contours (with size filtering)"""
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        
+        # 1. Noise reduction
+        bfilter = cv2.bilateralFilter(gray, 11, 17, 17)
+        
+        # 2. Edge detection
+        edged = cv2.Canny(bfilter, 30, 200)
+        
+        # 3. Find contours
+        contours, _ = cv2.findContours(edged, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # 4. Sort by area (largest first)
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:15]
+        
+        # Get image dimensions for size filtering
+        h, w = roi.shape[:2]
+        min_area = (w * h) * 0.01  # At least 1% of the vehicle crop
+        max_area = (w * h) * 0.5   # At most 50% of the vehicle crop
+        
+        for contour in contours:
+            # Approximate to polygon
+            peri = cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, 0.018 * peri, True)
+            
+            # If it's a rectangle (4 corners)
+            if len(approx) == 4:
+                x, y, w_box, h_box = cv2.boundingRect(contour)
+                area = w_box * h_box
+                
+                # --- SIZE FILTERING ---
+                # Ignore rectangles that are too small (date stickers) or too large
+                if area < min_area or area > max_area:
+                    continue
+                
+                # Also check aspect ratio (plates are wider than they are tall)
+                aspect_ratio = max(w_box, h_box) / min(w_box, h_box)
+                if aspect_ratio < 1.5:  # Too square (like a date sticker)
+                    continue
+                
+                # Add padding
+                pad = 10
+                x = max(0, x - pad)
+                y = max(0, y - pad)
+                w_box = min(roi.shape[1] - x, w_box + pad*2)
+                h_box = min(roi.shape[0] - y, h_box + pad*2)
+                
+                plate_roi = roi[y:y+h_box, x:x+w_box]
+                if plate_roi.size > 0:
+                    return plate_roi
+        
+        return None
+    
+    def _ocr_plate(self, plate_roi):
+        """Run EasyOCR on the cropped plate region"""
+        # Resize for better reading
+        plate_roi = cv2.resize(plate_roi, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(plate_roi, cv2.COLOR_BGR2GRAY)
+        
+        try:
+            results = self.ocr.readtext(gray)
+            
+            # Collect all text pieces
+            all_text = []
+            for (bbox, text, confidence) in results:
+                if confidence > 0.3:
+                    clean = text.replace(" ", "").upper()
+                    clean = ''.join(c for c in clean if c.isalnum())
+                    if clean:
+                        all_text.append(clean)
+            
+            if all_text:
+                combined = ''.join(all_text)
+                combined = ''.join(c for c in combined if c.isalnum())
+                
+                # If it's longer than 8 chars, it might include the date
+                if len(combined) > 8:
+                    plate_part = combined[:8]
+                    if len(plate_part) >= 4:
+                        return plate_part
+                
+                if len(combined) >= 4:
+                    return combined
+                    
+        except Exception as e:
+            print(f"OCR Error: {e}")
+            pass
+        
+        return None
+    
+    def _read_plate_fallback(self, roi):
+        """Original bottom-half method (your proven backup)"""
         if roi is None or roi.size == 0:
             return None
 
@@ -128,7 +236,7 @@ class VehicleRecognitionService:
                     return combined
                     
         except Exception as e:
-            print(f"OCR Error: {e}")
+            print(f"Fallback OCR Error: {e}")
             pass
 
         return None

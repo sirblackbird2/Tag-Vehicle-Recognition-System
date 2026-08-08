@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from app.routes import predict
+from app.config import BASE_DIR
 
 app = FastAPI(
     title="Vehicle Recognition API",
@@ -22,3 +24,11 @@ app.include_router(predict.router)
 @app.get("/")
 async def root():
     return {"message": "Vehicle Recognition API is running!"}
+
+# Serve the live camera HTML page
+@app.get("/live")
+async def live_camera():
+    html_path = BASE_DIR / "frontend" / "live_camera.html"
+    if html_path.exists():
+        return FileResponse(html_path)
+    return {"error": "live_camera.html not found"}
