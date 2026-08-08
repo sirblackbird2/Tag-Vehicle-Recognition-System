@@ -231,7 +231,7 @@ MIT License
 
 ## Author
 
-**sirblackbird2**
+GitHub: **[sirblackbird2](https://github.com/sirblackbird2)**
 
 ## Repository
 
