@@ -2,6 +2,13 @@ import streamlit as st
 import requests
 import streamlit.components.v1 as components
 
+# --- CONFIG ---
+# This is the only place you need to change the backend address.
+# Update this if your server's IP or port changes.
+API_URL = "https://192.168.1.8:8000"
+PREDICT_URL = f"{API_URL}/predict"
+# --- END CONFIG ---
+
 # --- Page Setup ---
 st.set_page_config(
     page_title="Vehicle Recognition System",
@@ -36,10 +43,13 @@ if page == "Upload Photo":
             with st.spinner("Processing..."):
                 try:
                     files = {"file": uploaded_file.getvalue()}
+                    # verify=False skips SSL cert validation — fine for a self-signed
+                    # cert on your own LAN, but do not use this if the server is ever
+                    # exposed beyond your local network.
                     response = requests.post(
-                        "https://192.168.1.8:8000/predict",
+                        PREDICT_URL,
                         files=files,
-                        verify=False  # Skip SSL verification for self-signed cert
+                        verify=False
                     )
 
                     if response.status_code == 200:
@@ -75,10 +85,10 @@ elif page == "Live Camera":
         with open("frontend/live_camera.html", "r", encoding="utf-8") as f:
             html_string = f.read()
 
-        # Update the fetch URL to use HTTPS with your IP
+        # Substitute the configured backend URL into the placeholder
         html_string = html_string.replace(
-            "fetch('/predict',",
-            "fetch('https://192.168.1.8:8000/predict',"
+            "API_URL_PLACEHOLDER",
+            API_URL
         )
 
         components.html(html_string, height=700, scrolling=False)
