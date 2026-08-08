@@ -55,10 +55,9 @@ Tag/
 │   └── web_app.py               # Standalone upload interface
 ├── models/
 │   └── yolov8n.pt               # YOLO model file
-├── cert.pem                     # SSL certificate (generated locally)
-├── key.pem                      # SSL private key (generated locally)
+├── cert.pem                     # SSL certificate (generated locally, gitignored)
+├── key.pem                      # SSL private key (generated locally, gitignored)
 ├── generate_cert.py             # Certificate generation script
-├── vehicle_detector.py          # Standalone test script
 └── requirements.txt             # Python dependencies
 ```
 
