@@ -54,12 +54,12 @@ Tag/
 │   ├── live_camera.html         # Camera page (embedded in dashboard)
 │   └── web_app.py               # Standalone upload interface
 ├── models/
-│   └── yolov8n.pt                # YOLO model file
-├── cert.pem                      # SSL certificate (generated locally)
-├── key.pem                       # SSL private key (generated locally)
-├── generate_cert.py              # Certificate generation script
-├── vehicle_detector.py           # Standalone test script
-└── requirements.txt               # Python dependencies
+│   └── yolov8n.pt               # YOLO model file
+├── cert.pem                     # SSL certificate (generated locally)
+├── key.pem                      # SSL private key (generated locally)
+├── generate_cert.py             # Certificate generation script
+├── vehicle_detector.py          # Standalone test script
+└── requirements.txt             # Python dependencies
 ```
 
 ---
