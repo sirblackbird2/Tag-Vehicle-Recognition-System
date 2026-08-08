@@ -67,3 +67,7 @@ dmypy.json
 
 # Streamlit
 .streamlit/
+
+# Legacy / unused files (superseded by app/services/vehicle_service.py)
+vehicle_detector.py
+weights/
