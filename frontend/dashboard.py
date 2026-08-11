@@ -65,6 +65,7 @@ if page == "Upload Photo":
                                 for i, vehicle in enumerate(data['vehicles'], 1):
                                     st.divider()
                                     st.write(f"**Vehicle {i}:** {vehicle['type']}")
+                                    st.write(f"   **Brand:** {vehicle.get('brand') or 'Unknown'}")  # Add this
                                     st.write(f"   **Confidence:** {vehicle['confidence']:.2%}")
                                     st.write(f"   **License Plate:** {vehicle['plate'] or 'Not detected'}")
                     else:
