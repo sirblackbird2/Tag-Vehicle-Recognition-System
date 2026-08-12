@@ -5,7 +5,11 @@ import easyocr
 import torch
 import torchvision.models as models
 import torchvision.transforms as transforms
-from app.config import YOLO_MODEL, DETECTION_CONFIDENCE, BRAND_MODEL_PATH, BRAND_CONFIDENCE_THRESHOLD
+from app.config import (
+    YOLO_MODEL, DETECTION_CONFIDENCE,
+    BRAND_MODEL_PATH, BRAND_CONFIDENCE_THRESHOLD,
+    MOTORCYCLE_BRAND_MODEL_PATH, MOTORCYCLE_BRAND_CONFIDENCE_THRESHOLD,
+)
 
 class VehicleRecognitionService:
     def __init__(self):
@@ -15,17 +19,11 @@ class VehicleRecognitionService:
         print("Loading EasyOCR...")
         self.ocr = easyocr.Reader(['en'], gpu=False)
         
-        # Load brand classifier
-        self.brand_model = None
-        self.brand_classes = []
-        self.brand_transform = None
-        self._load_brand_classifier()
-        
-        # Load motorcycle brand classifier
-        self.motorcycle_brand_model = None
-        self.motorcycle_brand_classes = []
-        self.motorcycle_brand_transform = None
-        self._load_motorcycle_brand_classifier()
+        # Brand classifiers: one per vehicle-body type, loaded generically.
+        # Each entry holds the model, its class list, threshold, and preprocessing transform.
+        self.brand_classifiers = {}
+        self._load_brand_classifier("car", BRAND_MODEL_PATH, BRAND_CONFIDENCE_THRESHOLD)
+        self._load_brand_classifier("motorcycle", MOTORCYCLE_BRAND_MODEL_PATH, MOTORCYCLE_BRAND_CONFIDENCE_THRESHOLD)
         
         self.vehicle_classes = {
             2: 'Car',
@@ -36,85 +34,58 @@ class VehicleRecognitionService:
         }
         print("Models loaded!")
     
-    def _load_brand_classifier(self):
+    def _load_brand_classifier(self, name, model_path, threshold):
+        """Load a ResNet18 brand classifier and register it under `name`
+        (e.g. 'car', 'motorcycle') so _classify_brand can dispatch by vehicle type."""
         try:
-            checkpoint = torch.load(BRAND_MODEL_PATH, map_location=torch.device('cpu'))
-            self.brand_classes = checkpoint['classes']
-            self.brand_model = models.resnet18(weights=None)
-            self.brand_model.fc = torch.nn.Linear(self.brand_model.fc.in_features, len(self.brand_classes))
-            self.brand_model.load_state_dict(checkpoint['model_state_dict'])
-            self.brand_model.eval()
-            
-            self.brand_transform = transforms.Compose([
+            checkpoint = torch.load(model_path, map_location=torch.device('cpu'))
+            classes = checkpoint['classes']
+
+            model = models.resnet18(weights=None)
+            model.fc = torch.nn.Linear(model.fc.in_features, len(classes))
+            model.load_state_dict(checkpoint['model_state_dict'])
+            model.eval()
+
+            transform = transforms.Compose([
                 transforms.ToPILImage(),
                 transforms.Resize((224, 224)),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                    std=[0.229, 0.224, 0.225])
             ])
-            print(f"Brand classifier loaded: {len(self.brand_classes)} classes")
+
+            self.brand_classifiers[name] = {
+                'model': model,
+                'classes': classes,
+                'transform': transform,
+                'threshold': threshold,
+            }
+            print(f"{name.capitalize()} brand classifier loaded: {len(classes)} classes")
         except Exception as e:
-            print(f"Brand classifier not loaded: {e}")
-            self.brand_model = None
-            
-    def _load_motorcycle_brand_classifier(self):
-        try:
-            checkpoint = torch.load('motorcycle_brand_classifier.pth', map_location=torch.device('cpu'))
-            self.motorcycle_brand_classes = checkpoint['classes']
-            self.motorcycle_brand_model = models.resnet18(weights=None)
-            self.motorcycle_brand_model.fc = torch.nn.Linear(self.motorcycle_brand_model.fc.in_features, len(self.motorcycle_brand_classes))
-            self.motorcycle_brand_model.load_state_dict(checkpoint['model_state_dict'])
-            self.motorcycle_brand_model.eval()
-        
-            self.motorcycle_brand_transform = transforms.Compose([
-                transforms.ToPILImage(),
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225])
-            ])
-            print(f"Motorcycle brand classifier loaded: {len(self.motorcycle_brand_classes)} classes")
-        except Exception as e:
-            print(f"Motorcycle brand classifier not loaded: {e}")
-            self.motorcycle_brand_model = None
+            print(f"{name.capitalize()} brand classifier not loaded: {e}")
     
-    def _classify_brand(self, roi):
-        if self.brand_model is None or roi is None or roi.size == 0:
+    def _classify_brand(self, name, roi):
+        """Run the brand classifier registered under `name` on a cropped vehicle ROI.
+        Returns the predicted brand, 'Unknown' if confidence is below threshold,
+        or None if no classifier is loaded for this vehicle type or on error."""
+        classifier = self.brand_classifiers.get(name)
+        if classifier is None or roi is None or roi.size == 0:
             return None
 
         try:
             roi_rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
-            tensor = self.brand_transform(roi_rgb).unsqueeze(0)
+            tensor = classifier['transform'](roi_rgb).unsqueeze(0)
 
             with torch.no_grad():
-                outputs = self.brand_model(tensor)
+                outputs = classifier['model'](tensor)
                 probabilities = torch.softmax(outputs, dim=1)
                 confidence, predicted = torch.max(probabilities, 1)
 
-            if confidence.item() > BRAND_CONFIDENCE_THRESHOLD:
-                return self.brand_classes[predicted.item()]
+            if confidence.item() > classifier['threshold']:
+                return classifier['classes'][predicted.item()]
             return "Unknown"
         except Exception as e:
-            print(f"Brand classification error: {e}")
-            return None
-        
-    def _classify_motorcycle_brand(self, roi):
-        if self.motorcycle_brand_model is None or roi is None or roi.size == 0:
-            return None
-    
-        try:
-            roi_rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
-            tensor = self.motorcycle_brand_transform(roi_rgb).unsqueeze(0)
-        
-            with torch.no_grad():
-                outputs = self.motorcycle_brand_model(tensor)
-                probabilities = torch.softmax(outputs, dim=1)
-                confidence, predicted = torch.max(probabilities, 1)
-        
-            if confidence.item() > 0.4:
-                return self.motorcycle_brand_classes[predicted.item()]
-            return "Unknown"
-        except Exception as e:
+            print(f"Brand classification error ({name}): {e}")
             return None
     
     def process_image(self, image_path):
@@ -138,14 +109,13 @@ class VehicleRecognitionService:
                     
                     roi = image[y1:y2, x1:x2]
                     plate_text = self._read_plate(roi)
-                    # Classify brand based on vehicle type
-                    if cls_id == 3:  # Motorcycle (YOLO class ID 3)
-                        brand = self._classify_motorcycle_brand(roi)
-                    else:
-                        brand = self._classify_brand(roi)
+                    # Route to the classifier trained for this vehicle's body type
+                    vehicle_type = self.vehicle_classes[cls_id]
+                    classifier_name = "motorcycle" if vehicle_type == "Motorcycle" else "car"
+                    brand = self._classify_brand(classifier_name, roi)
                     
                     all_vehicles.append({
-                        'type': self.vehicle_classes[cls_id],
+                        'type': vehicle_type,
                         'brand': brand,
                         'confidence': round(confidence, 3),
                         'bbox': [x1, y1, x2, y2],
