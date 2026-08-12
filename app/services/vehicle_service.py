@@ -21,6 +21,12 @@ class VehicleRecognitionService:
         self.brand_transform = None
         self._load_brand_classifier()
         
+        # Load motorcycle brand classifier
+        self.motorcycle_brand_model = None
+        self.motorcycle_brand_classes = []
+        self.motorcycle_brand_transform = None
+        self._load_motorcycle_brand_classifier()
+        
         self.vehicle_classes = {
             2: 'Car',
             3: 'Motorcycle',
@@ -50,6 +56,27 @@ class VehicleRecognitionService:
         except Exception as e:
             print(f"Brand classifier not loaded: {e}")
             self.brand_model = None
+            
+    def _load_motorcycle_brand_classifier(self):
+        try:
+            checkpoint = torch.load('motorcycle_brand_classifier.pth', map_location=torch.device('cpu'))
+            self.motorcycle_brand_classes = checkpoint['classes']
+            self.motorcycle_brand_model = models.resnet18(weights=None)
+            self.motorcycle_brand_model.fc = torch.nn.Linear(self.motorcycle_brand_model.fc.in_features, len(self.motorcycle_brand_classes))
+            self.motorcycle_brand_model.load_state_dict(checkpoint['model_state_dict'])
+            self.motorcycle_brand_model.eval()
+        
+            self.motorcycle_brand_transform = transforms.Compose([
+                transforms.ToPILImage(),
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225])
+            ])
+            print(f"Motorcycle brand classifier loaded: {len(self.motorcycle_brand_classes)} classes")
+        except Exception as e:
+            print(f"Motorcycle brand classifier not loaded: {e}")
+            self.motorcycle_brand_model = None
     
     def _classify_brand(self, roi):
         if self.brand_model is None or roi is None or roi.size == 0:
@@ -69,6 +96,25 @@ class VehicleRecognitionService:
             return "Unknown"
         except Exception as e:
             print(f"Brand classification error: {e}")
+            return None
+        
+    def _classify_motorcycle_brand(self, roi):
+        if self.motorcycle_brand_model is None or roi is None or roi.size == 0:
+            return None
+    
+        try:
+            roi_rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
+            tensor = self.motorcycle_brand_transform(roi_rgb).unsqueeze(0)
+        
+            with torch.no_grad():
+                outputs = self.motorcycle_brand_model(tensor)
+                probabilities = torch.softmax(outputs, dim=1)
+                confidence, predicted = torch.max(probabilities, 1)
+        
+            if confidence.item() > 0.4:
+                return self.motorcycle_brand_classes[predicted.item()]
+            return "Unknown"
+        except Exception as e:
             return None
     
     def process_image(self, image_path):
@@ -92,7 +138,11 @@ class VehicleRecognitionService:
                     
                     roi = image[y1:y2, x1:x2]
                     plate_text = self._read_plate(roi)
-                    brand = self._classify_brand(roi)
+                    # Classify brand based on vehicle type
+                    if cls_id == 3:  # Motorcycle (YOLO class ID 3)
+                        brand = self._classify_motorcycle_brand(roi)
+                    else:
+                        brand = self._classify_brand(roi)
                     
                     all_vehicles.append({
                         'type': self.vehicle_classes[cls_id],
