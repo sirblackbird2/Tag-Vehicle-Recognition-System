@@ -5,7 +5,7 @@ import easyocr
 import torch
 import torchvision.models as models
 import torchvision.transforms as transforms
-from app.config import YOLO_MODEL, DETECTION_CONFIDENCE
+from app.config import YOLO_MODEL, DETECTION_CONFIDENCE, BRAND_MODEL_PATH, BRAND_CONFIDENCE_THRESHOLD
 
 class VehicleRecognitionService:
     def __init__(self):
@@ -32,7 +32,7 @@ class VehicleRecognitionService:
     
     def _load_brand_classifier(self):
         try:
-            checkpoint = torch.load('brand_classifier.pth', map_location=torch.device('cpu'))
+            checkpoint = torch.load(BRAND_MODEL_PATH, map_location=torch.device('cpu'))
             self.brand_classes = checkpoint['classes']
             self.brand_model = models.resnet18(weights=None)
             self.brand_model.fc = torch.nn.Linear(self.brand_model.fc.in_features, len(self.brand_classes))
@@ -52,24 +52,23 @@ class VehicleRecognitionService:
             self.brand_model = None
     
     def _classify_brand(self, roi):
-        print("DEBUG: _classify_brand called")  # Add this
         if self.brand_model is None or roi is None or roi.size == 0:
-            print("DEBUG: Brand model or ROI is None")  # Add this
             return None
-        
+
         try:
             roi_rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
             tensor = self.brand_transform(roi_rgb).unsqueeze(0)
-            
+
             with torch.no_grad():
                 outputs = self.brand_model(tensor)
                 probabilities = torch.softmax(outputs, dim=1)
                 confidence, predicted = torch.max(probabilities, 1)
-            
-            if confidence.item() > 0.4:
+
+            if confidence.item() > BRAND_CONFIDENCE_THRESHOLD:
                 return self.brand_classes[predicted.item()]
             return "Unknown"
         except Exception as e:
+            print(f"Brand classification error: {e}")
             return None
     
     def process_image(self, image_path):
@@ -93,9 +92,7 @@ class VehicleRecognitionService:
                     
                     roi = image[y1:y2, x1:x2]
                     plate_text = self._read_plate(roi)
-                    print("DEBUG: Before brand classification")
                     brand = self._classify_brand(roi)
-                    print(f"DEBUG: Brand returned: {brand}")
                     
                     all_vehicles.append({
                         'type': self.vehicle_classes[cls_id],
