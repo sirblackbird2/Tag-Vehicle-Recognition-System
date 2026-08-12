@@ -1,65 +1,4 @@
-# Tag — Vehicle Recognition System
-
-A vehicle detection and license plate recognition system with a web dashboard and live camera support.
-
----
-
-## Features
-
-- **Vehicle Detection** — Identifies cars, trucks, motorcycles, buses, and bicycles using YOLO.
-- **License Plate Reading** — Extracts plate text using EasyOCR, with contour-based plate cropping and a bottom-half fallback.
-- **Web Dashboard** — Two modes: upload a photo, or scan in real time via camera.
-- **Live Camera Support** — Captures a frame every 2 seconds and sends it to the backend; works on mobile devices over HTTPS.
-- **FastAPI Backend** — Lightweight, performant, self-documenting via Swagger UI.
-- **Self-Signed SSL** — Enables camera access (`getUserMedia`) on modern browsers over your local network.
-
----
-
-## Tech Stack
-
-| Component | Technology |
-|-----------|------------|
-| Backend | Python, FastAPI, Uvicorn |
-| Vehicle Detection | YOLO (Ultralytics) |
-| OCR | EasyOCR |
-| Image Processing | OpenCV |
-| Frontend | Streamlit, HTML, JavaScript |
-| Camera Access | WebRTC (`getUserMedia`) |
-
----
-
-## Prerequisites
-
-- Python 3.8+
-- A webcam-capable device for the Live Camera mode
-- Two machines/devices need to be on the **same local network** if you're accessing the dashboard from a phone or another computer
-
----
-
-## Project Structure
-
-```
-Tag/
-├── app/
-│   ├── main.py                  # FastAPI entry point
-│   ├── config.py                # Configuration settings
-│   ├── models/
-│   │   └── schemas.py           # API response models
-│   ├── routes/
-│   │   └── predict.py           # /predict endpoint
-│   └── services/
-│       └── vehicle_service.py   # Core detection logic
-├── frontend/
-│   ├── dashboard.py             # Streamlit master dashboard
-│   ├── live_camera.html         # Camera page (embedded in dashboard)
-│   └── web_app.py               # Standalone upload interface
-├── models/
-│   └── yolov8n.pt               # YOLO model file
-├── cert.pem                     # SSL certificate (generated locally, gitignored)
-├── key.pem                      # SSL private key (generated locally, gitignored)
-├── generate_cert.py             # Certificate generation script
-└── requirements.txt             # Python dependencies
-```
+> **Note:** the `.pth` model files are tracked with [Git LFS](https://git-lfs.com/). Run `git lfs install` once before cloning, or `git lfs pull` after cloning, to fetch the actual model weights.
 
 ---
 
@@ -68,8 +7,8 @@ Tag/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/sirblackbird2/Tag.git
-cd Tag
+git clone https://github.com/sirblackbird2/Tag-Vehicle-Recognition-System.git
+cd Tag-Vehicle-Recognition-System
 ```
 
 ### 2. Set up a virtual environment
@@ -132,6 +71,10 @@ Backend settings live in `app/config.py`:
 | `YOLO_MODEL` | Path to the YOLO model file |
 | `DETECTION_CONFIDENCE` | Minimum detection confidence (default `0.5`) |
 | `OCR_LANG` | EasyOCR language code (default `"en"`) |
+| `BRAND_MODEL_PATH` | Path to the car brand classifier weights |
+| `BRAND_CONFIDENCE_THRESHOLD` | Min. softmax confidence to report a car brand instead of `"Unknown"` (default `0.65`) |
+| `MOTORCYCLE_BRAND_MODEL_PATH` | Path to the motorcycle brand classifier weights |
+| `MOTORCYCLE_BRAND_CONFIDENCE_THRESHOLD` | Min. softmax confidence to report a motorcycle brand instead of `"Unknown"` (default `0.65`) |
 
 Frontend backend address is configured once, at the top of `frontend/dashboard.py`:
 
@@ -140,6 +83,21 @@ API_URL = "https://192.168.1.8:8000"  # update this if your IP changes
 ```
 
 This is the only place the address needs to change — `live_camera.html` receives it automatically at render time.
+
+---
+
+## Brand Classification
+
+Each detected vehicle is routed to a brand classifier trained for its body type:
+
+| Vehicle Type | Classifier | Brands |
+|---|---|---|
+| Motorcycle | `motorcycle_brand_classifier.pth` | Honda, Yamaha |
+| Car, Bus, Truck, Bicycle | `brand_classifier.pth` | Toyota, Honda |
+
+Both are ResNet18 models fine-tuned on cropped vehicle images. Predictions below their confidence threshold (see Configuration above) are returned as `"Unknown"` rather than a low-confidence guess. Honda appears in both classifiers since it makes both cars and motorcycles — each was trained separately on images of that body type so the model learns brand-specific cues (badge, grille/fairing design) rather than just body shape.
+
+> **Note:** brand classification currently only distinguishes the trained classes above. Other brands will be misclassified as one of the trained options, or returned as `"Unknown"` if confidence is low — this reflects the current training data, not a general-purpose brand detector.
 
 ---
 
@@ -158,6 +116,7 @@ Upload an image and receive vehicle detection results.
   "vehicles": [
     {
       "type": "Car",
+      "brand": "Toyota",
       "confidence": 0.85,
       "bbox": [140, 45, 586, 388],
       "plate": "B1970SSW"
@@ -191,6 +150,7 @@ Simple health check.
 | Dashboard shows "Could not connect to backend" | Check the backend is running and that `API_URL` in `dashboard.py` matches your machine's current IP and port. |
 | `live_camera.html not found` error | Confirm the file exists at `frontend/live_camera.html` relative to where you launch `streamlit run`. |
 | No vehicles detected | Try a clearer, closer, or better-lit image; confirm `DETECTION_CONFIDENCE` in `app/config.py` isn't set too high. |
+| Brand always shows `"Unknown"` or brand classifier fails to load | Confirm `git lfs pull` was run so `brand_classifier.pth`/`motorcycle_brand_classifier.pth` downloaded as real files, not LFS pointer stubs — check file size is tens of MB, not a few hundred bytes. |
 
 ---
 
@@ -234,4 +194,4 @@ GitHub: **[sirblackbird2](https://github.com/sirblackbird2)**
 
 ## Repository
 
-[https://github.com/sirblackbird2/Tag](https://github.com/sirblackbird2/Tag)
+[https://github.com/sirblackbird2/Tag-Vehicle-Recognition-System](https://github.com/sirblackbird2/Tag-Vehicle-Recognition-System)
