@@ -11,3 +11,6 @@ class Vehicle(BaseModel):
 class PredictionResponse(BaseModel):
     vehicles: List[Vehicle]
     total: int
+    # Base64-encoded JPEG with bounding boxes/labels drawn on it.
+    # Only populated when the request is made with ?annotate=true.
+    annotated_image: Optional[str] = None
