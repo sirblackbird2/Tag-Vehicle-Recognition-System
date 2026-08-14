@@ -106,7 +106,7 @@ def render_vehicle_card(i, vehicle):
 
 
 # --- Sidebar Navigation ---
-st.sidebar.title("🚗 Tag")
+st.sidebar.title("Tag")
 st.sidebar.caption("Vehicle detection, brand ID & plate recognition")
 page = st.sidebar.radio(
     "Choose a mode:",
