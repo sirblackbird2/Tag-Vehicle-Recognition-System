@@ -19,22 +19,26 @@ st.set_page_config(
 )
 
 # --- Styling ---
+# Uses Streamlit's theme CSS variables (--secondary-background-color, --text-color)
+# instead of hardcoded colors, so the card looks right in both light and dark mode.
 st.markdown(
     """
     <style>
     .block-container { padding-top: 2rem; }
 
     .tag-card {
-        background: #ffffff;
-        border: 1px solid #e6e6e6;
+        background: #262730;
+        color: #fafafa;
+        border: 1px solid rgba(250, 250, 250, 0.15);
         border-radius: 12px;
         padding: 1.1rem 1.3rem;
         margin-bottom: 0.9rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     }
     .tag-card h4 {
         margin: 0 0 0.6rem 0;
         font-size: 1.05rem;
+        color: #fafafa;
     }
     .tag-badge {
         display: inline-block;
@@ -47,18 +51,19 @@ st.markdown(
     }
     .tag-row {
         font-size: 0.92rem;
-        color: #333;
+        color: #e0e0e0;
         margin: 0.15rem 0;
     }
     .tag-label {
-        color: #777;
+        color: #9a9aa5;
         font-weight: 500;
         display: inline-block;
         min-width: 90px;
     }
     .tag-plate {
         font-family: 'Consolas', monospace;
-        background: #f4f4f4;
+        background: rgba(255, 255, 255, 0.12);
+        color: #fafafa;
         padding: 0.1rem 0.4rem;
         border-radius: 4px;
         font-weight: 600;
@@ -87,7 +92,7 @@ def render_vehicle_card(i, vehicle):
 
     plate_html = (
         f'<span class="tag-plate">{plate}</span>'
-        if plate else '<span style="color:#999;">Not detected</span>'
+        if plate else '<span style="color:#9a9aa5;">Not detected</span>'
     )
 
     st.markdown(
@@ -106,7 +111,7 @@ def render_vehicle_card(i, vehicle):
 
 
 # --- Sidebar Navigation ---
-st.sidebar.title("Tag")
+st.sidebar.title("🚗 Tag")
 st.sidebar.caption("Vehicle detection, brand ID & plate recognition")
 page = st.sidebar.radio(
     "Choose a mode:",
@@ -128,7 +133,7 @@ if page == "Upload Photo":
 
         with col1:
             image_slot = st.empty()
-            image_slot.image(uploaded_file, caption="Uploaded Image", width='stretch')
+            image_slot.image(uploaded_file, caption="Uploaded Image", use_container_width=True)
 
         if st.button("Analyze", type="primary"):
             with st.spinner("Processing..."):
@@ -156,7 +161,7 @@ if page == "Upload Photo":
                                 image_slot.image(
                                     base64.b64decode(annotated_b64),
                                     caption="Detected Vehicles",
-                                    width="stretch",
+                                    use_container_width=True,
                                 )
 
                         with col2:
